@@ -316,4 +316,42 @@ The signal lives in a **3-month cross-sectional trend/momentum** composite (px_v
 ret_1m + rsi, possibly + low-vol), oriented on the **3m** horizon, with turnover control. The
 gates before it can touch the live verdict: significant **out-of-sample** 3m IC, the H1→H2
 decay must not kill it, and it must **survive transaction costs**. Phase 1 shows the raw
-material is there — it is NOT yet a validated, cost-surviving strategy.
+material is there - it is NOT yet a validated, cost-surviving strategy.
+
+---
+
+## 13. Phase-2 - walk-forward OOS validation of the 3m composite (`python -m backtest.strategy`)
+
+Built the 3-month cross-sectional composite *properly*: weights fit only on past completed
+data (no look-ahead), evaluated on **quarterly non-overlapping** 3m returns (monthly 3m IC
+overlaps -> inflated t), quarterly rebalance with a hysteresis buffer + 25bps costs, and an
+explicit PASS/FAIL gate (significant OOS IC AND works in H2 AND beats TASI net).
+
+### Result: every configuration FAILS the gate
+| factor set / weighting | OOS 3m IC quarterly (t) | H2 IC | net CAGR vs TASI | gate |
+|---|---|---|---|---|
+| tech_3m / ic | -0.007 (t-0.2) | -0.024 | +4.6% vs +5.8% | **FAIL** |
+| tech_3m / sign | -0.014 (t-0.3) | -0.034 | +4.8% vs +5.8% | **FAIL** |
+| tech_lowvol / ic | -0.015 (t-0.4) | -0.033 | +6.1% vs +5.8% | **FAIL** |
+| all / ic | +0.002 (t0.0) | +0.007 | +9.9% vs +9.5% | **FAIL** |
+| all / sign | -0.004 (t-0.1) | -0.009 | +7.6% vs +9.5% | **FAIL** |
+
+### Why Phase-1 looked promising but Phase-2 fails
+- **In-sample selection + overlap inflated Phase-1.** The per-factor 3m IC (~0.05-0.08, t>2) was
+  computed on overlapping monthly samples after seeing which factors looked good. As a
+  walk-forward composite on **non-overlapping** data, the IC collapses to ~0 (monthly-overlap
+  IC is only +0.02, t<1).
+- **The edge decayed / reversed in the recent half** (H2 IC negative for the technical sets).
+- The one set that nominally beat TASI net (all/ic: 9.9% vs 9.5%, Sharpe 0.34 vs 0.31) did so
+  with an **insignificant IC (t~0)** - luck, not signal - so it correctly fails the gate.
+
+### Conclusion (honest, final)
+**There is no validated, out-of-sample, cost-surviving predictive edge** in these
+cross-sectional technical/price factors on TASI over 2017-2025. The Phase-1 "signal" did not
+hold up under proper walk-forward testing. **No change was promoted to the live verdict.**
+
+**Final stance:** use the tool as a **transparent research screen / data aggregator**, not a
+return predictor. Avenues that *might* change this (no guarantee; all real research, not
+tweaks): longer + survivorship-free history; deeper point-in-time **fundamental-quality**
+factors (Pro-plan data); a broader universe; or accepting that single-market factor edges here
+are too small/unstable to trade net of costs.
