@@ -147,7 +147,7 @@ with tabs[0]:
         "N/A" if _missing(price) else f"{price:,.2f}",
         None if r.day_change_pct is None else f"{r.day_change_pct:+.2f}%",
     )
-    c1.caption(("⏱ delayed · " if delayed else "") + C.provenance_chip(r.price_provenance))
+    c1.caption(("⏱ delayed · " if delayed else "") + C.provenance_chip(C.source_of(ov.get("price"))))
     c2.metric("Market cap", C.big_number(_v(ov.get("market_cap")), " " + r.currency))
     c2.caption(C.provenance_chip(C.source_of(ov.get("market_cap"))))
     c3.metric("Shares out.", C.big_number(_v(ov.get("shares_outstanding"))))
