@@ -229,3 +229,49 @@ Aramco unchanged HOLD (~50). The model is now more conservative and the inputs a
   blend doesn't run). Needs a peer-universe fetch.
 - 🟡 Bank/insurance metrics NIM/NPL/CAR/combined-ratio — Pro-plan gated on SAHMK.
 - 🟡 Per-metric "as-of" dates not shown.
+
+---
+
+## 11. Backtest results (point-in-time, `python -m backtest.run`)
+
+**Sample:** 59 tickers, 64 monthly dates, 2018-05 → 2025-05, 3,504 observations.
+**Caveats:** survivorship-biased (current listings only), small/short single-market sample,
+no transaction costs, fundamentals are approximate PIT (~2y of dates only). **Indicative, not
+definitive — but the signal is clear enough to act on the conclusion.**
+
+### Information Coefficient (rank corr of score vs forward return; |t|>2 ≈ significant)
+| score | 1m | 3m | 6m | 12m |
+|---|---|---|---|---|
+| technical | -0.01 | +0.01 | -0.03 | **-0.088 (t-4.1)** |
+| trend | +0.02 | +0.05 (t1.7) | +0.02 | **-0.066 (t-2.8)** |
+| risk | -0.01 | +0.01 | 0.00 | +0.02 |
+| price_composite | 0.00 | +0.02 | -0.01 | **-0.065 (t-3.1)** |
+| fundamental | +0.04 | +0.01 | -0.02 | +0.05 (t1.4) |
+| full_composite | +0.02 | 0.00 | +0.01 | +0.046 (t2.3) |
+
+### Top-minus-bottom quintile spread (12m)
+technical **-10.4% (t-4.4)**, trend **-8.5% (t-3.4)**, price_composite **-10.0% (t-4.3)** —
+i.e. the highest-scored basket *under*performed the lowest by ~10% over a year.
+
+### Rating hit-rates — no discrimination
+3m / 12m % positive is ~40% for **buy, hold, AND sell** alike; at 12m "sell" mean return
+(+0.0%) was *better* than "buy" (-1.9%). The 3-tier rating has **no demonstrated edge**.
+
+### Equity curves (monthly top-quintile, long-only, vs TASI)
+- price_composite: CAGR +10.9%, Sharpe **0.33**, maxDD -32% (vs TASI +3.1%, Sharpe -0.04).
+- full_composite: CAGR +1.7%, Sharpe -0.12 — **underperformed** TASI (+3.4%).
+
+### Honest conclusion
+- **The verdict/rating has no demonstrated predictive edge.** Buy/Hold/Sell hit-rates are
+  indistinguishable; the composite does not rank future returns reliably.
+- **Technical & trend are contrarian at the 1-year horizon** in this sample (high score →
+  *under*performance, statistically significant). Over 1-3 months they are ~neutral.
+- **Fundamentals show a weak positive tilt** but it is not statistically robust (tiny PIT sample).
+- The one outperformance (price_composite *monthly* top-quintile) is weak (Sharpe 0.33), high
+  drawdown, contradicted by the negative longer-horizon IC, and likely an equal-weight /
+  short-momentum artifact — **not a reliable edge**.
+
+**Implication for use:** treat the tool as a **transparent research screen** to understand a
+stock's profile and generate questions — **not** as a buy/sell signal, and **do not size
+positions off the verdict.** (No methodology change was made in response to these results, to
+avoid overfitting to one in-sample backtest.)
