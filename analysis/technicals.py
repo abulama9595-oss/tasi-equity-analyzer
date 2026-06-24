@@ -135,8 +135,14 @@ def _sig_macd_hist(ind: pd.DataFrame) -> float:
     if "hist" not in ind or math.isnan(ind["hist"].iloc[-1]):
         return float("nan")
     hist = ind["hist"].iloc[-1]
+    # Normalise by volatility (ATR) so the histogram is comparable across stocks;
+    # fall back to a small fraction of price when ATR is unavailable.
+    atr = ind["atr"].iloc[-1] if "atr" in ind else float("nan")
     price = ind["close"].iloc[-1]
-    return _clip(hist / (price * 0.02)) if price else float("nan")
+    denom = atr if (atr and not math.isnan(atr)) else (price * 0.02 if price else float("nan"))
+    if not denom or math.isnan(denom):
+        return float("nan")
+    return _clip(hist / denom)
 
 
 def _sig_rsi(ind: pd.DataFrame) -> float:
@@ -144,12 +150,13 @@ def _sig_rsi(ind: pd.DataFrame) -> float:
     if r.empty:
         return float("nan")
     rsi = r.iloc[-1]
-    delta = rsi - r.iloc[-2] if len(r) >= 2 else 0.0
-    if rsi >= 70:
-        return -0.3 if delta < 0 else 0.3
-    if rsi <= 30:
-        return 0.5 if delta > 0 else -0.3
-    return _clip((rsi - 50) / 20.0)
+    prev = r.iloc[-2] if len(r) >= 2 else rsi
+    # Continuous signal (no step changes at 30/70): a trend-following level, damped toward
+    # the extremes (overbought/oversold tend to mean-revert), plus a recent-direction term.
+    level = _clip((rsi - 50) / 25.0)
+    damp = 1.0 - 0.5 * _clip((abs(rsi - 50) - 20) / 30.0, 0.0, 1.0)
+    slope = _clip((rsi - prev) / 8.0)
+    return _clip(0.75 * level * damp + 0.25 * slope)
 
 
 def _sig_macd_cross(ind: pd.DataFrame) -> float:

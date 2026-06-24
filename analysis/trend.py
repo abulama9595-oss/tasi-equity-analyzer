@@ -100,7 +100,15 @@ def _confidence(inputs: dict[str, float], composite: float, cfg) -> tuple[str, f
     pct = agree / len(present)
     hi = cfg.trend.confidence["high_if_agree_pct"]
     lo = cfg.trend.confidence["low_if_agree_pct"]
-    level = "high" if pct >= hi else ("low" if pct < lo else "medium")
+    # Inputs are correlated (mostly price-trend), so sign-agreement alone overstates
+    # confidence. Require a non-trivial trend magnitude for "high", and treat a near-flat
+    # (sideways) composite as low confidence regardless of agreement.
+    if pct >= hi and abs(composite) >= 30:
+        level = "high"
+    elif pct < lo or abs(composite) < 12:
+        level = "low"
+    else:
+        level = "medium"
     return level, round(pct, 2)
 
 

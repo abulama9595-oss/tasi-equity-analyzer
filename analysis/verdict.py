@@ -73,11 +73,12 @@ def analyse(fundamental, technical, trend, risk, cfg) -> VerdictResult:
     weights: dict[str, float] = dict(cfg.verdict.weights)
     trend_score, trend_conf = _trend_to_score(trend)
 
+    # NOTE: valuation is NOT a separate input here — it already lives inside `fundamental`
+    # (its valuation component). Adding it again would double-count valuation.
     inputs: dict[str, float] = {
         "fundamental": fundamental.subscore,
         "technical": technical.subscore,
         "trend": trend_score,
-        "valuation_vs_peers": fundamental.valuation_vs_peers,
         "risk": risk.risk_score,
     }
     # per-input data availability for the completeness indicator
@@ -85,7 +86,6 @@ def analyse(fundamental, technical, trend, risk, cfg) -> VerdictResult:
         "fundamental": fundamental.data_completeness,
         "technical": 1.0 if not scoring.is_missing(technical.subscore) else 0.0,
         "trend": 1.0 if not scoring.is_missing(trend_score) else 0.0,
-        "valuation_vs_peers": 1.0 if not scoring.is_missing(fundamental.valuation_vs_peers) else 0.0,
         "risk": risk.data_completeness,
     }
 
@@ -121,7 +121,7 @@ def analyse(fundamental, technical, trend, risk, cfg) -> VerdictResult:
     # most prone to gaps for smaller Saudi names, and the spec wants reliability to drop
     # visibly when they are missing. Infra inputs (technical/trend/risk) come from price
     # data and are usually present, so they get the smaller share.
-    infra_keys = ["technical", "trend", "valuation_vs_peers", "risk"]
+    infra_keys = ["technical", "trend", "risk"]
     infra = sum(availability[k] for k in infra_keys) / len(infra_keys)
     completeness = round(0.7 * availability["fundamental"] + 0.3 * infra, 3)
     dc_cfg = cfg.verdict.data_completeness
@@ -215,7 +215,7 @@ def _rationale(fundamental, technical, trend, risk, inputs) -> tuple[list[str], 
 
     tag("Fundamentals", fundamental.subscore)
     tag("Technical posture", technical.subscore)
-    tag("Valuation vs peers", fundamental.valuation_vs_peers)
+    tag("Valuation", fundamental.valuation_vs_peers)
     tag("Risk profile", risk.risk_score)
 
     # trend specifics

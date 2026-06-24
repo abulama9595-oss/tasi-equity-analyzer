@@ -28,9 +28,12 @@ COMPONENT_METRICS: dict[str, dict[str, list[str]]] = {
         "cash_flow": ["fcf_yield"],
     },
     "bank": {
+        # net_margin & revenue_growth excluded: a bank's "total revenue" is reported
+        # inconsistently year-to-year (gross vs net financing income), so anything derived
+        # from it is unreliable. ROE / EPS-growth (net-income based) and P/B are trustworthy.
         "valuation": ["pb", "pe"],
-        "profitability": ["roe", "nim", "cost_to_income", "net_margin"],
-        "growth": ["revenue_growth", "eps_growth"],
+        "profitability": ["roe", "nim", "cost_to_income"],
+        "growth": ["eps_growth"],
         "asset_quality": ["npl_ratio", "car"],
     },
     "reit": {
@@ -41,8 +44,8 @@ COMPONENT_METRICS: dict[str, dict[str, list[str]]] = {
     },
     "insurance": {
         "valuation": ["pb", "pe"],
-        "profitability": ["combined_ratio", "roe", "net_margin"],
-        "growth": ["revenue_growth", "eps_growth"],
+        "profitability": ["combined_ratio", "roe"],
+        "growth": ["eps_growth"],
         "financial_health": ["current_ratio"],
     },
 }
@@ -222,6 +225,15 @@ def analyse(
             )
         cscore, _ = scoring.weighted_average(scored_pairs)
         comp_scores[comp] = cscore
+
+    # Value-trap guard: a low multiple on a money-losing company is not "cheap value".
+    # Cap the valuation component when the business is loss-making (negative ROE / margin / EPS).
+    lossmaking = any(
+        v is not None and v < 0
+        for v in (_val(key_stats, "roe"), _val(key_stats, "net_margin"), _val(key_stats, "trailing_eps"))
+    )
+    if lossmaking and not scoring.is_missing(comp_scores.get("valuation", float("nan"))):
+        comp_scores["valuation"] = min(comp_scores["valuation"], 40.0)
 
     # Re-normalise component weights over components that produced a score.
     present_comps = [c for c, s in comp_scores.items() if not scoring.is_missing(s)]

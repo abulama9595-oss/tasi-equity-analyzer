@@ -357,11 +357,17 @@ class SaudiExchangeProvider(DataProvider):
             bal = fin.get("balance_sheets") or []
             cfs = fin.get("cash_flows") or []
             mc = f.get("market_cap")
+            price = c.get("current_price") if c else None
+            # SAHMK's eps_ttm/pe_ratio are unreliable (often ~2x off and internally
+            # inconsistent); basic_eps (latest annual NI / shares) matches the statements,
+            # so derive trailing P/E from price / basic_eps instead.
+            eps = f.get("basic_eps") or f.get("eps_ttm") or f.get("eps")
+            pe = (price / eps) if (price and eps and eps > 0) else None
             s: dict[str, Any] = {
-                "pe": f.get("pe_ratio"), "forward_pe": f.get("forward_pe"),
+                "pe": pe, "forward_pe": f.get("forward_pe"),
                 "pb": f.get("price_to_book"), "book_value": f.get("book_value"),
                 "market_cap": mc, "shares_outstanding": f.get("shares_outstanding"),
-                "trailing_eps": f.get("eps_ttm") or f.get("eps"),
+                "trailing_eps": eps,
             }
             if inc:
                 i0 = inc[0]
@@ -378,10 +384,12 @@ class SaudiExchangeProvider(DataProvider):
                         s["operating_margin"] = oi / rev
                 if len(inc) > 1:
                     r1, n1 = inc[1].get("total_revenue"), inc[1].get("net_income")
-                    if rev and r1:
-                        s["revenue_growth"] = (rev - r1) / abs(r1)
-                    if ni is not None and n1:
-                        s["eps_growth"] = (ni - n1) / abs(n1)
+                    # Only a positive base year gives a meaningful growth % (avoids the
+                    # sign-flip blow-ups like -1775% when the prior year was a loss).
+                    if rev and r1 and r1 > 0:
+                        s["revenue_growth"] = (rev - r1) / r1
+                    if ni is not None and n1 and n1 > 0:
+                        s["eps_growth"] = (ni - n1) / n1
             if bal:
                 b0 = bal[0]
                 eq, ta, td = b0.get("stockholders_equity"), b0.get("total_assets"), b0.get("total_debt")

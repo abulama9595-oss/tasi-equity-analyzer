@@ -63,9 +63,10 @@ html(
     "</div></div>"
 )
 html(
-    "<div class='disclaimer'><b>Not financial advice — personal research only.</b> "
-    "Every score is transparent and auditable; verify each input before acting. "
-    "Quotes and fundamentals may be delayed or incomplete.</div>"
+    "<div class='disclaimer'><b>Not financial advice — a research screen, not a tested signal.</b> "
+    "Scores are transparent and auditable but have no validated track record, and the underlying "
+    "fundamentals (P/E, growth, margins) can be inaccurate — verify them before acting. "
+    "Quotes and fundamentals may be delayed.</div>"
 )
 
 with st.sidebar:

@@ -134,7 +134,7 @@ metric_scoring:
 # ---- Technical sub-score ----
 technical_score:
   components: {trend: 0.50, momentum: 0.35, volume: 0.15}
-  timeframe_weights: {monthly: 0.45, weekly: 0.35, daily: 0.20}
+  timeframe_weights: {monthly: 0.40, weekly: 0.35, daily: 0.25}   # less monthly-dominant
   signals:   # each → [-1,+1]; weight is within its component
     price_vs_sma200:  {component: trend,    weight: 0.30}
     sma50_vs_sma200:  {component: trend,    weight: 0.25}   # golden/death cross
@@ -148,7 +148,9 @@ technical_score:
 
 # ---- Trend assessment (probabilistic, NOT a price forecast) ----
 trend:
-  inputs: {ma_slope: 0.30, adx_di: 0.25, macd: 0.20, structure_hhhl: 0.15, rel_strength_tasi: 0.10}
+  # Re-weighted to lean on the inputs that are NOT already in the technical sub-score
+  # (price structure + relative strength vs TASI), reducing trend/technical double-counting.
+  inputs: {ma_slope: 0.25, adx_di: 0.15, macd: 0.15, structure_hhhl: 0.25, rel_strength_tasi: 0.20}
   composite_range: [-100, 100]
   classification:           # by composite trend score
     strong_uptrend_min: 60
@@ -162,12 +164,11 @@ trend:
 
 # ---- Verdict: top-level composite (0..100) ----
 verdict:
-  weights:
-    fundamental: 0.35
+  weights:                   # valuation_vs_peers removed (was double-counting the valuation
+    fundamental: 0.45        # component already inside `fundamental`); its 0.15 folded here.
     technical: 0.25
     trend: 0.15
-    valuation_vs_peers: 0.15
-    risk: 0.10
+    risk: 0.15
   rating_bands:             # 5-tier on composite 0..100
     strong_buy_min: 80
     buy_min: 65
