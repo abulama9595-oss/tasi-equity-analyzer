@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 
+import pandas as pd
 import streamlit as st
 
 import analyzer as az
@@ -51,6 +52,57 @@ def _missing(v):
 
 def html(s: str):
     st.markdown(s, unsafe_allow_html=True)
+
+
+_CONV_RANK = {"high": 2, "medium": 1, "low": 0}
+
+
+@st.cache_data(show_spinner=False, ttl=21600)  # 6h
+def run_market_scan() -> "pd.DataFrame":
+    """Score every ticker in the bundled universe and return a ranking table.
+    Heavy on a cold cache (one full analysis per name) — gated behind a button and cached."""
+    import pandas as pd
+    cfg_, registry_, composite_, sahmk_ = get_resources()
+    rows = []
+    for ref in registry_.all_refs():
+        try:
+            r = az.analyze(ref.code, cfg_, registry_, composite_, sahmk_)
+        except Exception:
+            continue
+        if r.error or r.verdict is None:
+            continue
+        v, ov = r.verdict, r.overview
+        rows.append({
+            "code": ref.code,
+            "name": _v(ov.get("name_en")) or ref.name_en or ref.code,
+            "sector": _v(ov.get("sector")) or ref.sector or "",
+            "price": _v(ov.get("price")),
+            "composite": v.composite,
+            "rating5": v.rating5_label,
+            "rating3": v.rating3,
+            "conviction": v.conviction,
+            "conv_rank": _CONV_RANK.get(v.conviction, 0),
+            "completeness": v.data_completeness,
+            "low_reliability": v.low_reliability,
+        })
+    return pd.DataFrame(rows)
+
+
+def _scan_table(df, side: str) -> str:
+    kind = {"buy": "good", "hold": "warn", "sell": "bad"}
+    rows = []
+    for i, (_, x) in enumerate(df.iterrows(), 1):
+        comp = x["composite"]
+        flag = " ⚠" if x["low_reliability"] else ""
+        rows.append([
+            i,
+            f"<b>{x['code']}</b>",
+            str(x["name"])[:24],
+            f"<span style='color:{T.score_color(comp)};font-weight:700'>{comp:.0f}</span>",
+            T.pill(x["rating5"], kind.get(x["rating3"], "neutral")),
+            f"{str(x['conviction']).title()}{flag}",
+        ])
+    return C.simple_table_html(["#", "Ticker", "Name", "Score", "Rating", "Conviction"], rows)
 
 
 cfg, registry, composite, sahmk = get_resources()
@@ -115,8 +167,8 @@ for w in r.warnings:
 
 
 # --------------------------------------------------------------------------- #
-tab_overview, tab_verdict, tab_trend, tab_technical, tab_fund, tab_risk = st.tabs(
-    ["Overview", "🟢 Verdict", "Trend", "Technical", "Fundamentals", "Risk & Income"])
+tab_overview, tab_verdict, tab_trend, tab_technical, tab_fund, tab_risk, tab_scan = st.tabs(
+    ["Overview", "🟢 Verdict", "Trend", "Technical", "Fundamentals", "Risk & Income", "🔎 Market scan"])
 ov = r.overview
 
 
@@ -339,3 +391,41 @@ with tab_risk:
         rows = [[h["year"], f"{h['dps']:.4f}"] for h in dv.history]
         html("<div style='height:8px'></div>")
         html(C.simple_table_html(["Year", "DPS (SAR)"], rows))
+
+
+# --------------------------- Market scan ----------------------------------- #
+with tab_scan:
+    html(T.section("Market scan",
+                   "Ranks the bundled TASI universe by the verdict composite (higher = more "
+                   "Buy-like). Conviction is shown; ⚠ flags low data reliability."))
+    html("<div class='disclaimer'>This is a <b>screen, not a recommendation.</b> The audit/backtest "
+         "found the verdict has <b>no validated predictive edge</b>, so use this only to surface "
+         "candidates for your own research — not to decide trades. Verify before acting.</div>")
+
+    if st.button("Run / refresh market scan", type="primary"):
+        run_market_scan.clear()
+        st.session_state["scan_ready"] = True
+
+    if st.session_state.get("scan_ready"):
+        with st.spinner("Scanning the TASI universe… (first run can take 1–2 minutes; cached for 6h)"):
+            scan = run_market_scan()
+        if scan is None or scan.empty:
+            st.warning("Scan returned no results (data unavailable).")
+        else:
+            st.caption(f"Scanned {len(scan)} names · {pd.Timestamp.now():%Y-%m-%d %H:%M}")
+            buys = scan.sort_values(["composite", "conv_rank"], ascending=[False, False]).head(10)
+            sells = scan.sort_values(["composite", "conv_rank"], ascending=[True, False]).head(10)
+            cL, cR = st.columns(2)
+            with cL:
+                html(T.section("Top 10 — Buy candidates", "Highest composite"))
+                html(_scan_table(buys, "buy"))
+            with cR:
+                html(T.section("Top 10 — Sell candidates", "Lowest composite"))
+                html(_scan_table(sells, "sell"))
+            st.caption("Ranked by composite score (Buy: highest; Sell: lowest), conviction as tiebreak. "
+                       "Not financial advice.")
+    else:
+        n = len(registry.all_refs())
+        html(f"<div style='color:var(--text-dim);font-size:.9rem'>Click <b>Run / refresh market scan</b> "
+             f"to rank the ~{n}-name bundled universe. The first run scores every name "
+             f"(1–2 min on a cold cache); results are cached for 6 hours.</div>")
