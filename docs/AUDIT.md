@@ -355,3 +355,36 @@ return predictor. Avenues that *might* change this (no guarantee; all real resea
 tweaks): longer + survivorship-free history; deeper point-in-time **fundamental-quality**
 factors (Pro-plan data); a broader universe; or accepting that single-market factor edges here
 are too small/unstable to trade net of costs.
+
+---
+
+## 14. Phase-3 - sector-neutral multi-factor composite (`python -m backtest.multifactor`)
+
+The factor-investing playbook: Value (earnings/book/FCF/sales yields) + Quality (ROE, ROA,
+-D/E) + Momentum (12-1) + Low-Vol (-126d vol), each neutralised by company-type (sector proxy),
+equal-weighted with economic signs (no fitting => OOS by construction), 60 liquid large-caps,
+25bps costs, same Phase-2 gate. (Value/Quality limited to ~2y of point-in-time statements.)
+
+### Result: every composite FAILS the gate
+| composite | sample | OOS 3m IC quarterly (t) | H1 / H2 | net CAGR vs TASI | gate |
+|---|---|---|---|---|---|
+| MOM_LOWVOL | 7y, 24q | +0.028 (t0.7) | +0.046 / +0.007 | -4.0% vs +1.2% | **FAIL** |
+| VALUE_QUALITY | 2y, 10q | +0.032 (t0.5) | -0.046 / **+0.109** | -0.5% vs -2.0% | **FAIL** |
+| VQM | 2y, 10q | -0.042 (t-1.6) | -0.045 / -0.039 | -4.7% vs -2.8% | **FAIL** |
+| ALL4 | 2y, 10q | -0.069 (t-1.6) | -0.048 / -0.090 | -8.8% vs -2.0% | **FAIL** |
+
+### Read
+- **No composite has a statistically significant OOS IC**, and none reliably beats TASI net of costs.
+- **Momentum + Low-Vol** (the only long-sample, price-only composite) has a mildly positive but
+  insignificant IC and its top-quintile basket *under*performed TASI - no edge.
+- **Value + Quality** is the only mildly encouraging signal (H2 IC +0.109; beat TASI net), but on
+  just **10 quarters** it is not statistically meaningful (t0.5). This is the avenue most worth
+  revisiting **once point-in-time fundamental history is deeper/longer** (the planned data expansion).
+- Adding momentum to Value+Quality (VQM/ALL4) *hurt* - momentum is contrarian in this sample.
+
+### Conclusion
+Consistent with the Fundamental Law (small single-market universe = low breadth) and short
+fundamental history, **the multi-factor model does not yet show a validated, cost-surviving edge,
+and nothing was promoted to the live verdict.** The most promising next step is a **Value+Quality
+tilt on a deeper point-in-time fundamental dataset** (SAHMK Pro or a vendor) - then re-run this
+exact gate. Until something passes: the tool remains a **transparent screen, not a predictor.**
