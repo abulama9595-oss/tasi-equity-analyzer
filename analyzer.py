@@ -123,6 +123,13 @@ def analyze(
             overview=overview, key_stats=key_stats, warnings=warnings,
         )
 
+    if len(price_df) < 60:
+        warnings.append(
+            f"Only {len(price_df)} price bars available (source: {price_prov.source}) - "
+            "indicators and trend are limited. Full history needs a paid SAHMK plan on the "
+            "cloud, or yfinance when run locally."
+        )
+
     # Backfill bilingual names / sector from the bundled registry when providers lack them
     # (e.g. yfinance has no Arabic name, and SAHMK is off without a key).
     def _backfill(key: str, val: Any) -> None:

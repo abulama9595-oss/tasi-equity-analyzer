@@ -31,6 +31,8 @@ from .provider_base import DataProvider
 
 log = logging.getLogger(__name__)
 
+_OHLCV = ["open", "high", "low", "close", "volume"]
+
 
 class SaudiExchangeProvider(DataProvider):
     name = "saudi_exchange"
@@ -124,9 +126,109 @@ class SaudiExchangeProvider(DataProvider):
             "avg_volume": q.get("volume"),
         }
 
-    # ------- not-yet-confirmed endpoints: inert, composite falls back ---- #
+    # ------- historical prices (SAHMK Starter+; free tier returns 403) ---- #
     def get_price_history(self, ticker: str, period: str, interval: str) -> pd.DataFrame:
-        return pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
+        """Daily OHLCV from SAHMK's /historical endpoint. Requires a paid plan; on the free
+        tier this 403s and returns empty so the composite falls back to yfinance. The exact
+        response schema is parsed flexibly (see _parse_history) and verified against the live
+        endpoint once a paid key is available. Empty results are not cached."""
+        empty = pd.DataFrame(columns=_OHLCV)
+        if not self.available:
+            return empty
+        code = self._code(ticker)
+        ckey = f"sahmk:{code}:{period}:{interval}"
+        if self.cache:
+            hit = self.cache.get("price_history", ckey)
+            if isinstance(hit, pd.DataFrame) and not hit.empty:
+                return hit
+        df = self._fetch_history(code, period, interval)
+        if self.cache and isinstance(df, pd.DataFrame) and not df.empty:
+            self.cache.set("price_history", ckey, df)
+        return df
+
+    def _fetch_history(self, code: str, period: str, interval: str) -> pd.DataFrame:
+        # The response echoes from/to/count, so the endpoint takes a date range. Request the
+        # full window (the free tier still caps at ~1 month; a paid plan returns it all), and
+        # keep the largest result across the candidate param styles. Stop early once we have
+        # enough bars to conserve the SAHMK request quota.
+        import datetime as dt
+
+        years = 10
+        if period and period.endswith("y") and period[:-1].isdigit():
+            years = int(period[:-1])
+        today = dt.date.today()
+        start = (today - dt.timedelta(days=years * 366)).isoformat()
+        candidates = (
+            f"historical/{code}/?from={start}&to={today.isoformat()}&interval={interval}",
+            f"historical/{code}/?period={period}&interval={interval}",
+            f"historical/{code}/?range={period}",
+            f"historical/{code}/",
+        )
+        best = pd.DataFrame(columns=_OHLCV)
+        for path in candidates:
+            df = self._parse_history(self._get(path))
+            if len(df) > len(best):
+                best = df
+            if len(best) > 300:  # plenty for indicators; avoid extra requests
+                break
+        return best
+
+    @staticmethod
+    def _parse_history(data: Any) -> pd.DataFrame:
+        """Flexibly parse a historical-prices JSON payload into an OHLCV DataFrame."""
+        if not data:
+            return pd.DataFrame(columns=_OHLCV)
+        records = data
+        if isinstance(data, dict):
+            records = None
+            for k in ("data", "results", "history", "candles", "prices", "items", "quotes"):
+                if isinstance(data.get(k), list):
+                    records = data[k]
+                    break
+        if not isinstance(records, list) or not records:
+            return pd.DataFrame(columns=_OHLCV)
+
+        date_keys = ("date", "datetime", "time", "t", "timestamp", "trade_date", "tradeDate")
+        field_keys = {
+            "open": ("open", "o", "open_price", "openPrice"),
+            "high": ("high", "h", "high_price", "highPrice"),
+            "low": ("low", "l", "low_price", "lowPrice"),
+            "close": ("close", "c", "close_price", "closePrice", "last", "last_price"),
+            "volume": ("volume", "v", "vol", "traded_volume", "tradedVolume"),
+        }
+
+        def pick(rec: dict, keys: tuple) -> Any:
+            for k in keys:
+                if rec.get(k) is not None:
+                    return rec[k]
+            return None
+
+        idx, rows = [], []
+        for rec in records:
+            if not isinstance(rec, dict):
+                continue
+            d = pick(rec, date_keys)
+            if d is None:
+                continue
+            idx.append(d)
+            rows.append({c: pick(rec, field_keys[c]) for c in _OHLCV})
+        if not rows:
+            return pd.DataFrame(columns=_OHLCV)
+
+        df = pd.DataFrame(rows, columns=_OHLCV)
+        index = pd.to_datetime(pd.Series(idx), errors="coerce")
+        if index.isna().all():  # epoch seconds/millis fallback
+            num = pd.to_numeric(pd.Series(idx), errors="coerce")
+            unit = "ms" if num.dropna().abs().gt(10**11).any() else "s"
+            index = pd.to_datetime(num, unit=unit, errors="coerce")
+        df.index = index
+        if getattr(df.index, "tz", None) is not None:
+            df.index = df.index.tz_localize(None)
+        for c in _OHLCV:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+        df = df.dropna(subset=["close"]).sort_index()
+        df.index.name = "date"
+        return df
 
     def get_financials(self, ticker: str) -> dict[str, pd.DataFrame]:
         return {}
