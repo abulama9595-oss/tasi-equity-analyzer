@@ -7,6 +7,7 @@ layer falls back to other sources when a field is missing.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import pandas as pd
@@ -42,17 +43,34 @@ class YFinanceProvider(DataProvider):
             return pd.DataFrame(columns=_OHLCV)
         key = f"{ticker}:{period}:{interval}"
 
-        def _fetch() -> pd.DataFrame:
+        # Serve only a *non-empty* cached result. yfinance can return empty when Yahoo
+        # rate-limits (common on shared/cloud IPs); caching that empty would persist the
+        # failure for the whole TTL, so we never cache empties and retry with backoff.
+        if self.cache:
+            hit = self.cache.get("price_history", key)
+            if isinstance(hit, pd.DataFrame) and not hit.empty:
+                return hit
+
+        out = self._fetch_history(ticker, period, interval)
+        if self.cache and isinstance(out, pd.DataFrame) and not out.empty:
+            self.cache.set("price_history", key, out)
+        return out
+
+    def _fetch_history(self, ticker: str, period: str, interval: str, attempts: int = 3) -> pd.DataFrame:
+        delay = 1.0
+        for i in range(attempts):
             try:
                 df = self._ticker(ticker).history(period=period, interval=interval, auto_adjust=False)
+                out = self._normalise_ohlcv(df)
+                if not out.empty:
+                    return out
+                log.info("yfinance returned empty for %s (attempt %d/%d)", ticker, i + 1, attempts)
             except Exception as exc:
-                log.warning("yfinance price history failed for %s: %s", ticker, exc)
-                return pd.DataFrame(columns=_OHLCV)
-            return self._normalise_ohlcv(df)
-
-        if self.cache:
-            return self.cache.get_or_compute("price_history", key, _fetch)
-        return _fetch()
+                log.warning("yfinance price history error for %s (attempt %d/%d): %s", ticker, i + 1, attempts, exc)
+            if i < attempts - 1:
+                time.sleep(delay)
+                delay *= 2
+        return pd.DataFrame(columns=_OHLCV)
 
     @staticmethod
     def _normalise_ohlcv(df: pd.DataFrame) -> pd.DataFrame:

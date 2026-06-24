@@ -116,7 +116,10 @@ def analyze(
         warnings.append("No price history available from any source - technical/trend/risk skipped.")
         return _error_result(
             symbol, ref, cfg,
-            "No price history available - the ticker may be delisted or temporarily unavailable.",
+            "No price history available. The free price source (yfinance/Yahoo) returned "
+            "nothing - this usually means Yahoo is rate-limiting this server, which is common "
+            "on shared cloud hosts (e.g. Streamlit Cloud). It typically works when run locally "
+            "or after a short wait. (The ticker could also be delisted.)",
             overview=overview, key_stats=key_stats, warnings=warnings,
         )
 
