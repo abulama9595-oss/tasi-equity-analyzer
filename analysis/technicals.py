@@ -75,23 +75,47 @@ def _clip(x: float, lo=-1.0, hi=1.0) -> float:
     return max(lo, min(hi, x))
 
 
+def _longest_sma(ind: pd.DataFrame) -> tuple[str, pd.Series] | None:
+    """Longest computable SMA among 200/100/50 (coarser timeframes lack enough bars for
+    a 200-period MA — e.g. only ~120 monthly bars over 10y — so fall back gracefully)."""
+    for p in (200, 100, 50):
+        c = f"sma_{p}"
+        if c in ind.columns and not ind[c].dropna().empty:
+            return c, ind[c]
+    return None
+
+
+def _available_sma_periods(ind: pd.DataFrame) -> list[int]:
+    out = []
+    for p in (200, 100, 50):
+        c = f"sma_{p}"
+        if c in ind.columns and not math.isnan(ind[c].iloc[-1]):
+            out.append(p)
+    return out
+
+
 def _sig_price_vs_sma200(ind: pd.DataFrame) -> float:
-    if "sma_200" not in ind or ind["sma_200"].dropna().empty:
+    ma = _longest_sma(ind)
+    if ma is None:
         return float("nan")
+    _, series = ma
     price = ind["close"].iloc[-1]
-    sma = ind["sma_200"].iloc[-1]
-    if math.isnan(sma) or not sma:
+    mav = series.iloc[-1]
+    if math.isnan(mav) or not mav:
         return float("nan")
-    pos = _clip((price / sma - 1) / 0.10)
-    slope = ti.slope(ind["sma_200"], 5)
+    pos = _clip((price / mav - 1) / 0.10)
+    slope = ti.slope(series, 5)
     slope_sig = _clip(np.sign(slope)) if not math.isnan(slope) else 0.0
     return _clip(0.7 * pos + 0.3 * slope_sig)
 
 
 def _sig_sma50_vs_sma200(ind: pd.DataFrame) -> float:
-    if "sma_50" not in ind or "sma_200" not in ind:
+    # Use the longest and shortest available MAs as the slow/fast pair for the cross.
+    avail = _available_sma_periods(ind)
+    if len(avail) < 2:
         return float("nan")
-    a, b = ind["sma_50"].iloc[-1], ind["sma_200"].iloc[-1]
+    long_p, short_p = avail[0], avail[-1]
+    a, b = ind[f"sma_{short_p}"].iloc[-1], ind[f"sma_{long_p}"].iloc[-1]
     if math.isnan(a) or math.isnan(b) or not b:
         return float("nan")
     return _clip((a / b - 1) / 0.05)
@@ -192,8 +216,8 @@ _SIGNAL_FUNCS = {
 }
 
 _SIGNAL_INTERP = {
-    "price_vs_sma200": "Price vs 200-period MA (with slope)",
-    "sma50_vs_sma200": "50 vs 200 MA (golden/death cross)",
+    "price_vs_sma200": "Price vs long-term MA (with slope)",
+    "sma50_vs_sma200": "Golden/death cross (50 vs long MA)",
     "adx_di": "Directional movement (ADX-weighted)",
     "macd_hist": "MACD histogram",
     "rsi": "RSI level & turn",
