@@ -1,9 +1,10 @@
 """TASI Equity Analyzer — Streamlit entry point.
 
-Single-ticker analysis for the Saudi market (Tadawul / TASI): overview, type-aware
-fundamentals, multi-timeframe technicals, a probabilistic trend assessment, and a clear,
-auditable Buy/Hold/Sell verdict — plus risk, dividends, an indicative Shariah screen, and a
-methodology page. Dark "terminal" theme; every abbreviation has a hover tooltip.
+Single-ticker analysis for the Saudi market (Tadawul / TASI): overview, a clear auditable
+Buy/Hold/Sell verdict, a probabilistic trend assessment, multi-timeframe technicals,
+type-aware fundamentals, and risk & income. Dark "terminal" theme; every abbreviation has
+a hover tooltip. (Shariah and methodology are still computed and included in the exported
+report; the indicative Shariah screen and config remain in analysis/ and config/.)
 
 NOT financial advice. For personal research only.
 """
@@ -113,13 +114,13 @@ for w in r.warnings:
 
 
 # --------------------------------------------------------------------------- #
-tabs = st.tabs(["Overview", "Fundamentals", "Technical", "Trend", "🟢 Verdict",
-                "Risk & Income", "Shariah", "Methodology"])
+tab_overview, tab_verdict, tab_trend, tab_technical, tab_fund, tab_risk = st.tabs(
+    ["Overview", "🟢 Verdict", "Trend", "Technical", "Fundamentals", "Risk & Income"])
 ov = r.overview
 
 
 # ----------------------------- Overview ------------------------------------ #
-with tabs[0]:
+with tab_overview:
     name_en = _v(ov.get("name_en")) or r.ref.name_en or r.ticker
     name_ar = _v(ov.get("name_ar"))
     ar = f"<span style='color:var(--text-dim);font-size:1.05rem'>{name_ar}</span>" if name_ar else ""
@@ -172,7 +173,7 @@ with tabs[0]:
 
 
 # --------------------------- Fundamentals ---------------------------------- #
-with tabs[1]:
+with tab_fund:
     f = r.fundamentals
     html(T.section(f"Fundamentals — {f.rubric.title()} rubric",
                    "Metric set & weights switch by company type. Hover any metric name for its meaning."))
@@ -201,7 +202,7 @@ with tabs[1]:
 
 
 # ---------------------------- Technical ------------------------------------ #
-with tabs[2]:
+with tab_technical:
     t = r.technical
     html(T.section("Technical analysis", "Daily, weekly & monthly. Hover RSI / MACD / ADX / ATR for meanings."))
     cards = [T.stat_card("Technical sub-score", "N/A" if _missing(t.subscore) else f"{t.subscore:.0f}",
@@ -243,7 +244,7 @@ with tabs[2]:
 
 
 # ------------------------------ Trend -------------------------------------- #
-with tabs[3]:
+with tab_trend:
     tr = r.trend
     html(T.section("Trend assessment", "A probabilistic classification — NOT a price forecast."))
     cols = st.columns(2)
@@ -274,7 +275,7 @@ with tabs[3]:
 
 
 # ----------------------------- Verdict ------------------------------------- #
-with tabs[4]:
+with tab_verdict:
     v = r.verdict
     html(T.verdict_hero(v.rating5_label, v.rating3, v.composite, v.summary,
                         v.conviction, v.data_completeness, v.low_reliability))
@@ -306,7 +307,7 @@ with tabs[4]:
 
 
 # -------------------------- Risk & Income ---------------------------------- #
-with tabs[5]:
+with tab_risk:
     rk, dv = r.risk, r.dividends
     html(T.section("Risk metrics", "Hover each metric for its meaning. Risk sub-score: higher = safer."))
     rcards = [
@@ -337,61 +338,3 @@ with tabs[5]:
         rows = [[h["year"], f"{h['dps']:.4f}"] for h in dv.history]
         html("<div style='height:8px'></div>")
         html(C.simple_table_html(["Year", "DPS (SAR)"], rows))
-
-
-# ------------------------------ Shariah ------------------------------------ #
-with tabs[6]:
-    sh = r.shariah
-    html(T.section("Shariah screen", "Indicative quantitative screen — not a fatwa."))
-    if sh.compliant is None:
-        html(f"<div style='margin-bottom:8px'>{T.pill('Insufficient data','neutral')}</div>")
-    elif sh.compliant:
-        html(f"<div style='margin-bottom:8px'>{T.pill('Indicatively COMPLIANT','good')}</div>")
-    else:
-        html(f"<div style='margin-bottom:8px'>{T.pill('Indicatively NON-COMPLIANT','bad')}</div>")
-    html(f"<div style='color:var(--text-dim);font-size:.85rem;margin-bottom:10px'>"
-         f"Methodology: <b style='color:var(--text)'>{sh.methodology}</b> · "
-         f"Denominator: <b style='color:var(--text)'>{sh.denominator}</b>"
-         + (f" · Bundled flag: {sh.sector_flag}" if sh.sector_flag else "") + "</div>")
-    rows = [[c.name, "N/A" if c.value is None else f"{c.value:.1%}", f"{c.threshold:.0%}",
-             "—" if c.passed is None else ("✅" if c.passed else "❌")] for c in sh.checks]
-    html(C.simple_table_html(["Screen", "Value", "Threshold", "Pass"], rows))
-    html(f"<div class='disclaimer' style='margin-top:12px'>{T._esc(sh.note)}</div>")
-
-
-# ---------------------------- Methodology ---------------------------------- #
-with tabs[7]:
-    html(T.section("Methodology & assumptions",
-                   "Every weight, threshold and rubric is loaded verbatim from config/config.yaml."))
-    with st.expander("Verdict — weights & rating bands", expanded=True):
-        st.json({"weights": cfg.verdict.weights, "rating_bands": cfg.verdict.rating_bands,
-                 "three_tier_map": cfg.verdict.three_tier_map,
-                 "data_completeness": cfg.verdict.data_completeness})
-    with st.expander("Risk sub-score"):
-        st.json(cfg.verdict.risk_score)
-    with st.expander("Fundamental sub-score — component weights by type"):
-        st.json(cfg.fundamental_score)
-    with st.expander("Per-metric scoring anchors"):
-        st.json({"blend_sector_percentile": cfg.metric_scoring.blend_sector_percentile,
-                 "metrics": cfg.metric_scoring.metrics})
-    with st.expander("Technical sub-score"):
-        st.json({"components": cfg.technical_score.components,
-                 "timeframe_weights": cfg.technical_score.timeframe_weights,
-                 "signals": cfg.technical_score.signals})
-    with st.expander("Trend assessment"):
-        st.json({"inputs": cfg.trend.inputs, "classification": cfg.trend.classification,
-                 "horizons": cfg.trend.horizons, "confidence": cfg.trend.confidence})
-    with st.expander("Indicators & timeframes"):
-        st.json({"indicators": {"rsi_period": cfg.indicators.rsi_period,
-                                "rsi_overbought": cfg.indicators.rsi_overbought,
-                                "rsi_oversold": cfg.indicators.rsi_oversold,
-                                "macd": cfg.indicators.macd.model_dump(),
-                                "sma_periods": cfg.indicators.sma_periods,
-                                "ema_periods": cfg.indicators.ema_periods},
-                 "resample": cfg.timeframes.resample.model_dump()})
-    with st.expander("Shariah thresholds"):
-        st.json({"methodology": cfg.shariah.methodology, "denominator": cfg.shariah.denominator,
-                 "thresholds": cfg.shariah.thresholds})
-    html("<div style='color:var(--text-faint);font-size:.8rem;margin-top:10px'>"
-         "Scoring: linear anchors map a metric between p0→0 and p100→100; 'band' metrics score 100 inside "
-         "[low,high] and decay outside; signals emit −1…+1. Missing inputs are dropped and weights re-normalised.</div>")
