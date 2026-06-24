@@ -204,24 +204,30 @@ _SIGNAL_INTERP = {
 }
 
 
-def _support_resistance(df: pd.DataFrame, window: int = 5, n: int = 3) -> tuple[list[float], list[float]]:
-    """Nearest swing lows (support) and highs (resistance) around the current price."""
-    if df.empty:
+def _support_resistance(
+    df: pd.DataFrame, ref_price: float | None, window: int = 5, n: int = 3
+) -> tuple[list[float], list[float]]:
+    """Swing pivots split around the *current* price: those below are support, those
+    above are resistance. Both swing highs and lows are pooled (a former low above the
+    current price acts as resistance, and vice versa — classic role reversal).
+
+    ``ref_price`` must be the current/live price (latest daily close), NOT the timeframe's
+    last bar close — otherwise on coarser timeframes (whose last *complete* bar can sit
+    above the live price) a level could be mislabelled support when it is really above price.
+    """
+    if df.empty or ref_price is None or (isinstance(ref_price, float) and math.isnan(ref_price)):
         return [], []
-    highs, lows = df["high"], df["low"]
-    price = df["close"].iloc[-1]
-    piv_hi, piv_lo = [], []
-    h = highs.to_numpy()
-    low_arr = lows.to_numpy()
+    highs = df["high"].to_numpy()
+    lows = df["low"].to_numpy()
+    pivots: set[float] = set()
     for i in range(window, len(df) - window):
-        seg_h = h[i - window : i + window + 1]
-        seg_l = low_arr[i - window : i + window + 1]
-        if h[i] == seg_h.max():
-            piv_hi.append(h[i])
-        if low_arr[i] == seg_l.min():
-            piv_lo.append(low_arr[i])
-    resistance = sorted({round(x, 2) for x in piv_hi if x > price})[:n]
-    support = sorted({round(x, 2) for x in piv_lo if x < price}, reverse=True)[:n]
+        if highs[i] == highs[i - window : i + window + 1].max():
+            pivots.add(round(float(highs[i]), 2))
+        if lows[i] == lows[i - window : i + window + 1].min():
+            pivots.add(round(float(lows[i]), 2))
+    ref = round(float(ref_price), 2)  # compare on the same rounding as the pivots
+    support = sorted([p for p in pivots if p < ref], reverse=True)[:n]
+    resistance = sorted([p for p in pivots if p > ref])[:n]
     return support, resistance
 
 
@@ -244,10 +250,12 @@ def _divergence(ind: pd.DataFrame, lookback: int = 40) -> str | None:
     return None
 
 
-def compute_timeframe(timeframe: str, df: pd.DataFrame, cfg) -> TFData:
+def compute_timeframe(timeframe: str, df: pd.DataFrame, cfg, ref_price: float | None = None) -> TFData:
     ind = build_indicator_frame(df, cfg)
     signals = {k: fn(ind) for k, fn in _SIGNAL_FUNCS.items()}
-    support, resistance = _support_resistance(df)
+    if ref_price is None and not df.empty:
+        ref_price = float(df["close"].iloc[-1])
+    support, resistance = _support_resistance(df, ref_price)
     latest = _latest_values(ind, cfg)
     tf = TFData(
         timeframe=timeframe,
@@ -334,11 +342,15 @@ def analyse(price_daily: pd.DataFrame, cfg) -> TechnicalResult:
         "weekly": ti.resample_ohlcv(price_daily, rs.weekly_rule, rs.drop_incomplete_trailing),
         "monthly": ti.resample_ohlcv(price_daily, rs.monthly_rule, rs.drop_incomplete_trailing),
     }
+    # Current/live price = latest daily close; used to classify support vs resistance
+    # consistently across every timeframe.
+    ref_price = float(price_daily["close"].iloc[-1]) if (price_daily is not None and not price_daily.empty) else None
+
     by_tf: dict[str, TFData] = {}
     for tf_name, fdf in frames.items():
         if fdf is None or fdf.empty:
             continue
-        by_tf[tf_name] = compute_timeframe(tf_name, fdf, cfg)
+        by_tf[tf_name] = compute_timeframe(tf_name, fdf, cfg, ref_price)
 
     tf_weights = cfg.technical_score.timeframe_weights
     tf_scores = {name: by_tf[name].score for name in by_tf}

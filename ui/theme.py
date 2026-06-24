@@ -301,9 +301,9 @@ h1,h2,h3{ letter-spacing:-.02em; }
 /* ---------- stat cards ---------- */
 .stat-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(var(--minw,175px),1fr)); gap:12px; margin:6px 0 4px; }
 .stat-card{ position:relative; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
-  padding:14px 16px; overflow:hidden; transition:transform .12s ease, border-color .12s ease; }
+  padding:14px 16px; overflow:visible; transition:transform .12s ease, border-color .12s ease; }
 .stat-card:hover{ transform:translateY(-2px); border-color:var(--border-2); }
-.stat-accent{ position:absolute; left:0; top:0; bottom:0; width:3px; }
+.stat-accent{ position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:var(--radius-sm) 0 0 var(--radius-sm); }
 .stat-label{ color:var(--text-dim); font-size:.74rem; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
 .stat-value{ font-size:1.5rem; font-weight:700; margin-top:4px; font-feature-settings:"tnum"; }
 .stat-sub{ margin-top:6px; font-size:.74rem; color:var(--text-faint); }
