@@ -147,31 +147,55 @@ class SaudiExchangeProvider(DataProvider):
         return df
 
     def _fetch_history(self, code: str, period: str, interval: str) -> pd.DataFrame:
-        # The response echoes from/to/count, so the endpoint takes a date range. Request the
-        # full window (the free tier still caps at ~1 month; a paid plan returns it all), and
-        # keep the largest result across the candidate param styles. Stop early once we have
-        # enough bars to conserve the SAHMK request quota.
+        """Fetch daily history via the /historical from/to endpoint.
+
+        SAHMK caps each response at ~1000 rows returned ascending, which truncates the
+        *newest* data on long ranges. To get contiguous history up to today we request in
+        backward-walking chunks (each safely under the cap, the newest ending today) and
+        concatenate. Walks back using the actual earliest date returned, so it's robust to
+        the exact cap value.
+        """
         import datetime as dt
 
         years = 10
         if period and period.endswith("y") and period[:-1].isdigit():
             years = int(period[:-1])
         today = dt.date.today()
-        start = (today - dt.timedelta(days=years * 366)).isoformat()
-        candidates = (
-            f"historical/{code}/?from={start}&to={today.isoformat()}&interval={interval}",
-            f"historical/{code}/?period={period}&interval={interval}",
-            f"historical/{code}/?range={period}",
-            f"historical/{code}/",
-        )
-        best = pd.DataFrame(columns=_OHLCV)
-        for path in candidates:
-            df = self._parse_history(self._get(path))
-            if len(df) > len(best):
-                best = df
-            if len(best) > 300:  # plenty for indicators; avoid extra requests
+        earliest = today - dt.timedelta(days=years * 366)
+        chunk = dt.timedelta(days=3 * 366)  # ~3y per request, well under the ~1000-row cap
+
+        def fetch(start: dt.date, end: dt.date) -> pd.DataFrame:
+            path = f"historical/{code}/?from={start.isoformat()}&to={end.isoformat()}&interval={interval}"
+            return self._parse_history(self._get(path))
+
+        frames: list[pd.DataFrame] = []
+        # 1) Recent window: a `from` within the last few months returns data up to today
+        #    (older `from` values cap at the EOD store's lag). This guarantees current data.
+        recent = fetch(today - dt.timedelta(days=150), today)
+        if not recent.empty:
+            frames.append(recent)
+            end = recent.index.min().date() - dt.timedelta(days=1)
+        else:
+            end = today
+
+        # 2) Walk backward in sub-cap chunks for the rest of the history.
+        for _ in range(years // 3 + 2):  # safety bound on number of requests
+            if end <= earliest:
                 break
-        return best
+            df = fetch(max(earliest, end - chunk), end)
+            if df.empty:
+                break
+            frames.append(df)
+            new_end = df.index.min().date() - dt.timedelta(days=1)
+            if new_end >= end:  # no backward progress -> stop
+                break
+            end = new_end
+
+        if not frames:
+            return self._parse_history(self._get(f"historical/{code}/?interval={interval}"))
+        out = pd.concat(frames)
+        out = out[~out.index.duplicated(keep="last")].sort_index()
+        return out
 
     @staticmethod
     def _parse_history(data: Any) -> pd.DataFrame:
@@ -228,6 +252,21 @@ class SaudiExchangeProvider(DataProvider):
             df[c] = pd.to_numeric(df[c], errors="coerce")
         df = df.dropna(subset=["close"]).sort_index()
         df.index.name = "date"
+        return df
+
+    def get_index_history(self, interval: str = "1d") -> pd.DataFrame:
+        """TASI index history (symbol 'TASI' on SAHMK), for beta / relative strength on
+        cloud hosts where Yahoo's ^TASI.SR is blocked."""
+        if not self.available:
+            return pd.DataFrame(columns=_OHLCV)
+        ckey = f"sahmk:TASI:idx:{interval}"
+        if self.cache:
+            hit = self.cache.get("price_history", ckey)
+            if isinstance(hit, pd.DataFrame) and not hit.empty:
+                return hit
+        df = self._fetch_history("TASI", "10y", interval)
+        if self.cache and isinstance(df, pd.DataFrame) and not df.empty:
+            self.cache.set("price_history", ckey, df)
         return df
 
     def get_financials(self, ticker: str) -> dict[str, pd.DataFrame]:
