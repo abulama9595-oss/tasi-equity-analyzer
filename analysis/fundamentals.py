@@ -279,6 +279,12 @@ def _display(key: str, value: Any, unit: str) -> str:
     if key in _PERCENT_METRICS:
         return f"{value * 100:.1f}%"
     if unit == "x":
+        # Multiples are "not meaningful" when negative or extreme (e.g. P/E on a depressed
+        # earnings year). The score still uses the real value; only the display is capped.
+        if value < 0:
+            return "n/m"
+        if value > 99:
+            return ">99x"
         return f"{value:.2f}x"
     return f"{value:,.2f}"
 
