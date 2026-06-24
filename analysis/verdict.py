@@ -35,6 +35,7 @@ class VerdictResult:
     conviction: str = "medium"
     data_completeness: float = 0.0
     low_reliability: bool = False
+    summary: str = ""  # plain-English reasoning for the call
 
 
 def _rating5(composite: float, cfg) -> str:
@@ -128,6 +129,7 @@ def analyse(fundamental, technical, trend, risk, cfg) -> VerdictResult:
 
     conviction = _conviction(inputs, present, completeness, trend_conf, dc_cfg)
     bull, bear = _rationale(fundamental, technical, trend, risk, inputs)
+    summary = _summary(rating3, composite, inputs, present, trend, low_reliability)
 
     return VerdictResult(
         rating5=rating5,
@@ -140,7 +142,49 @@ def analyse(fundamental, technical, trend, risk, cfg) -> VerdictResult:
         conviction=conviction,
         data_completeness=completeness,
         low_reliability=low_reliability,
+        summary=summary,
     )
+
+
+# Plain-language names for each verdict input, used in the reasoning summary.
+_PILLAR_NAMES = {
+    "fundamental": "fundamentals",
+    "technical": "the technical setup",
+    "trend": "the trend",
+    "valuation_vs_peers": "valuation vs peers",
+    "risk": "the risk profile",
+}
+
+
+def _summary(rating3, composite, inputs, present, trend, low_reliability) -> str:
+    """A 2-3 sentence, plain-English rationale for the verdict."""
+    call = {"buy": "a BUY", "hold": "a HOLD", "sell": "a SELL"}[rating3]
+    parts = [f"This screens as {call}, with a composite score of {composite:.0f}/100."]
+
+    if present:
+        scores = {k: inputs[k] for k in present}
+        best = max(scores, key=scores.get)
+        worst = min(scores, key=scores.get)
+        if best != worst:
+            parts.append(
+                f"{_PILLAR_NAMES[best].capitalize()} is the strongest pillar "
+                f"({scores[best]:.0f}/100) and {_PILLAR_NAMES[worst]} the weakest "
+                f"({scores[worst]:.0f}/100)."
+            )
+        else:
+            parts.append(f"{_PILLAR_NAMES[best].capitalize()} scores {scores[best]:.0f}/100.")
+
+    st_call, mt = trend.short_term, trend.medium_term
+    if st_call and mt and st_call.classification != mt.classification:
+        parts.append(
+            f"Timeframes diverge — {st_call.classification.lower()} over the coming weeks "
+            f"but {mt.classification.lower()} over months."
+        )
+
+    if low_reliability:
+        parts.append("Fundamentals coverage is thin, so treat this with reduced confidence.")
+
+    return " ".join(parts)
 
 
 def _conviction(inputs, present, completeness, trend_conf, dc_cfg) -> str:
