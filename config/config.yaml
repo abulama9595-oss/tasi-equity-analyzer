@@ -27,8 +27,8 @@ providers:
 
 # Composite per-field source preference: try in order, fall back, record provenance.
 field_preference:
-  price_history:      [yfinance, saudi_exchange]
-  index_history:      [yfinance, saudi_exchange]
+  price_history:      [saudi_exchange, yfinance]   # SAHMK first (works on cloud; yfinance fallback)
+  index_history:      [saudi_exchange, yfinance]
   company_info:       [saudi_exchange, yfinance]
   sector:             [saudi_exchange, yfinance]
   free_float:         [saudi_exchange, yfinance]
