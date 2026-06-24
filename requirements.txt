@@ -1,0 +1,15 @@
+# TASI Equity Analyzer — pinned dependencies (Python 3.11+, verified on 3.12.10).
+# Indicators are vendored in indicators/technical.py (no TA-Lib, no `ta` lib), so the
+# dependency surface stays small and NumPy-2 safe. See requirements.lock for the full
+# transitive freeze.
+
+streamlit==1.58.0
+yfinance==0.2.66
+pandas==2.3.3
+numpy==2.5.0
+plotly==5.24.1
+pydantic==2.13.4
+python-dotenv==1.2.2
+requests==2.34.2
+PyYAML==6.0.3
+pytest==8.4.2

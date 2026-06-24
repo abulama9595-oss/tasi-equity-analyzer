@@ -1,0 +1,199 @@
+# TASI Equity Analyzer — committed defaults (Appendix A of the build prompt, verbatim).
+# Every value here is surfaced on the in-app Methodology page so the analysis stays
+# auditable. Treat as user-tunable: loaded + validated by pydantic (config/settings.py).
+# If a key is missing the loader fails loudly rather than guessing.
+
+app:
+  base_currency: SAR
+  index_symbol: "^TASI.SR"
+  locale: en               # en | ar  (bilingual labels where feasible)
+  watchlist_max: 30
+
+providers:
+  price_history: yfinance            # long history, no key
+  saudi_exchange:
+    backend: sahmk                   # sahmk | licensed | scraper
+    base_url: "https://app.sahmk.sa/api/v1"
+    api_key_env: SAHMK_API_KEY
+    quotes_delayed: true             # free tier ~15-min delay; label it
+  enable_portal_scraper: false       # saudiexchange.sa portal scraping — OFF (ToS + fragility)
+  news:
+    enabled: false
+    source: saudi_exchange           # saudi_exchange | marketaux
+    marketaux_api_key_env: MARKETAUX_API_KEY
+  twelvedata:                        # optional paid fundamentals (exchange XSAU)
+    enabled: false
+    api_key_env: TWELVEDATA_API_KEY
+
+# Composite per-field source preference: try in order, fall back, record provenance.
+field_preference:
+  price_history:      [yfinance, saudi_exchange]
+  index_history:      [yfinance]
+  company_info:       [saudi_exchange, yfinance]
+  sector:             [saudi_exchange, yfinance]
+  free_float:         [saudi_exchange, yfinance]
+  shares_outstanding: [saudi_exchange, yfinance]
+  financials:         [saudi_exchange, yfinance]   # official statements preferred
+  key_stats:          [yfinance, saudi_exchange]
+  dividends:          [saudi_exchange, yfinance]
+  disclosures:        [saudi_exchange]
+
+cache:
+  dir: ".cache"
+  ttl_seconds:
+    price_history: 3600      # 1h
+    intraday_quote: 300      # 5m (delayed anyway)
+    fundamentals: 86400      # 24h
+    company_info: 604800     # 7d
+    disclosures: 1800        # 30m
+
+risk_free:
+  source: config             # config | saibor (if a live source is wired)
+  annual_rate: 0.052         # SAIBOR/repo proxy — EDIT to current; used for Sharpe
+
+indicators:
+  rsi_period: 14
+  rsi_overbought: 70
+  rsi_oversold: 30
+  macd: {fast: 12, slow: 26, signal: 9}
+  sma_periods: [20, 50, 100, 200]
+  ema_periods: [12, 26, 50]
+  bollinger: {period: 20, std: 2}
+  atr_period: 14
+  stochastic: {k: 14, d: 3, smooth: 3}
+  adx_period: 14
+
+timeframes:
+  price_history_period: "10y"        # monthly indicators need years of data
+  min_bars: {daily: 250, weekly: 100, monthly: 60}
+  resample:
+    weekly_rule: "W-THU"             # Tadawul week is Sun–Thu; week ends Thursday
+    monthly_rule: "ME"
+    drop_incomplete_trailing: true
+
+# ---- Fundamental sub-score: component weights per company type (each sums to 1.0) ----
+fundamental_score:
+  general:
+    valuation: 0.30
+    profitability: 0.25
+    growth: 0.20
+    financial_health: 0.15
+    cash_flow: 0.10
+  bank:
+    valuation: 0.25        # P/B-led
+    profitability: 0.35    # ROE, NIM, cost-to-income
+    growth: 0.15
+    asset_quality: 0.25    # NPL, CAR
+  reit:
+    valuation: 0.25        # P/FFO, P/NAV
+    distribution: 0.35     # yield + FFO cover
+    growth: 0.15
+    financial_health: 0.25 # LTV / leverage
+  insurance:
+    valuation: 0.25
+    profitability: 0.35    # combined ratio, ROE
+    growth: 0.15
+    financial_health: 0.25 # solvency
+
+# Per-metric → 0..100 mapping. Final metric score = 0.65*anchor + 0.35*sector_percentile.
+metric_scoring:
+  blend_sector_percentile: 0.35
+  metrics:
+    pe:                {direction: lower,  p0: 40,    p100: 8}
+    pb:                {direction: lower,  p0: 6,     p100: 0.8}
+    ps:                {direction: lower,  p0: 12,    p100: 1}
+    ev_ebitda:         {direction: lower,  p0: 25,    p100: 5}
+    peg:               {direction: lower,  p0: 3,     p100: 0.5}
+    roe:               {direction: higher, p0: 0.0,   p100: 0.20}
+    roa:               {direction: higher, p0: 0.0,   p100: 0.12}
+    roic:              {direction: higher, p0: 0.0,   p100: 0.15}
+    gross_margin:      {direction: higher, p0: 0.10,  p100: 0.60}
+    operating_margin:  {direction: higher, p0: 0.0,   p100: 0.30}
+    net_margin:        {direction: higher, p0: 0.0,   p100: 0.25}
+    revenue_growth:    {direction: higher, p0: -0.05, p100: 0.20}
+    eps_growth:        {direction: higher, p0: -0.05, p100: 0.25}
+    debt_equity:       {direction: lower,  p0: 2.5,   p100: 0.2}
+    current_ratio:     {direction: higher, p0: 0.8,   p100: 2.5}
+    interest_coverage: {direction: higher, p0: 1.0,   p100: 8.0}
+    net_debt_ebitda:   {direction: lower,  p0: 5.0,   p100: 0.0}
+    fcf_yield:         {direction: higher, p0: 0.0,   p100: 0.10}
+    dividend_yield:    {direction: higher, p0: 0.0,   p100: 0.08}
+    payout_ratio:      {direction: band,   low: 0.30, high: 0.70}
+    # banks
+    nim:               {direction: higher, p0: 0.01,  p100: 0.05}
+    cost_to_income:    {direction: lower,  p0: 0.65,  p100: 0.30}
+    npl_ratio:         {direction: lower,  p0: 0.08,  p100: 0.01}
+    car:               {direction: higher, p0: 0.105, p100: 0.20}
+    # REITs
+    p_ffo:             {direction: lower,  p0: 25,    p100: 8}
+    ffo_payout:        {direction: band,   low: 0.70, high: 0.95}
+    ltv:               {direction: lower,  p0: 0.60,  p100: 0.20}
+    # insurance
+    combined_ratio:    {direction: lower,  p0: 1.10,  p100: 0.85}
+
+# ---- Technical sub-score ----
+technical_score:
+  components: {trend: 0.50, momentum: 0.35, volume: 0.15}
+  timeframe_weights: {monthly: 0.45, weekly: 0.35, daily: 0.20}
+  signals:   # each → [-1,+1]; weight is within its component
+    price_vs_sma200:  {component: trend,    weight: 0.30}
+    sma50_vs_sma200:  {component: trend,    weight: 0.25}   # golden/death cross
+    adx_di:           {component: trend,    weight: 0.25}
+    macd_hist:        {component: trend,    weight: 0.20}
+    rsi:              {component: momentum, weight: 0.40}
+    macd_cross:       {component: momentum, weight: 0.35}
+    stochastic:       {component: momentum, weight: 0.25}
+    obv_trend:        {component: volume,   weight: 0.60}
+    vol_vs_avg:       {component: volume,   weight: 0.40}
+
+# ---- Trend assessment (probabilistic, NOT a price forecast) ----
+trend:
+  inputs: {ma_slope: 0.30, adx_di: 0.25, macd: 0.20, structure_hhhl: 0.15, rel_strength_tasi: 0.10}
+  composite_range: [-100, 100]
+  classification:           # by composite trend score
+    strong_uptrend_min: 60
+    uptrend_min: 20
+    sideways_band: [-20, 20]
+    downtrend_max: -20
+    strong_downtrend_max: -60
+  horizons: {short_term_weeks: 8, medium_term_months: 6}
+  confidence: {high_if_agree_pct: 0.75, low_if_agree_pct: 0.50}  # share of inputs agreeing
+  optional_model: {enabled: false, type: holt_winters}           # explainable only; show CI + backtested hit-rate
+
+# ---- Verdict: top-level composite (0..100) ----
+verdict:
+  weights:
+    fundamental: 0.35
+    technical: 0.25
+    trend: 0.15
+    valuation_vs_peers: 0.15
+    risk: 0.10
+  rating_bands:             # 5-tier on composite 0..100
+    strong_buy_min: 80
+    buy_min: 65
+    hold_min: 45
+    reduce_min: 30          # below reduce_min → sell
+  three_tier_map:
+    buy:  [strong_buy, buy]
+    hold: [hold]
+    sell: [reduce, sell]
+  risk_score:               # 0..100, higher = safer
+    inputs:
+      beta_vs_tasi:   {direction: lower,  p0: 1.8,  p100: 0.4}
+      annualized_vol: {direction: lower,  p0: 0.60, p100: 0.12}
+      max_drawdown:   {direction: lower,  p0: 0.60, p100: 0.10}   # absolute value
+      sharpe:         {direction: higher, p0: -0.5, p100: 2.0}
+    weights: {beta_vs_tasi: 0.25, annualized_vol: 0.30, max_drawdown: 0.25, sharpe: 0.20}
+  data_completeness:
+    full_confidence_min: 0.80   # fraction of expected fields present
+    low_reliability_below: 0.50 # flag verdict prominently below this
+
+# ---- Shariah screen (INDICATIVE — not a fatwa; thresholds vary by board) ----
+shariah:
+  methodology: aaoifi          # aaoifi | sp_shariah | msci
+  denominator: market_cap      # market_cap | total_assets (varies by methodology)
+  thresholds:
+    interest_debt_to_denom_max:      0.30
+    cash_and_interest_sec_to_denom_max: 0.30
+    receivables_to_denom_max:        0.49
+    non_compliant_income_max:        0.05

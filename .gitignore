@@ -1,0 +1,23 @@
+# Secrets & caches — never commit
+.env
+.cache/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Build / OS / editor
+build/
+dist/
+*.log
+.DS_Store
+.idea/
+.vscode/
+
+# Generated reports
+reports/out/

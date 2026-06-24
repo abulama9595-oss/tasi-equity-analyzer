@@ -1,0 +1,60 @@
+ticker,name_en,name_ar,sector,company_type,shariah_flag
+2222,Saudi Aramco,أرامكو السعودية,Energy,general,compliant
+2010,SABIC,سابك,Materials,general,compliant
+2020,SABIC Agri-Nutrients,سابك للمغذيات الزراعية,Materials,general,compliant
+2290,Yanbu National Petrochemical (Yansab),ينساب,Materials,general,compliant
+2310,Sahara International Petrochemical (Sipchem),سبكيم العالمية,Materials,general,compliant
+2330,Advanced Petrochemical,المتقدمة,Materials,general,compliant
+2350,Saudi Kayan Petrochemical,كيان السعودية,Materials,general,compliant
+2380,Rabigh Refining & Petrochemical (Petro Rabigh),بترو رابغ,Materials,general,compliant
+2060,Tasnee,التصنيع,Materials,general,compliant
+1211,Saudi Arabian Mining (Maaden),معادن,Materials,general,compliant
+3030,Saudi Cement,أسمنت السعودية,Materials,general,compliant
+3020,Yamama Cement,أسمنت اليمامة,Materials,general,compliant
+3040,Qassim Cement,أسمنت القصيم,Materials,general,compliant
+1010,Riyad Bank,بنك الرياض,Banks,bank,non_compliant
+1020,Bank Aljazira,بنك الجزيرة,Banks,bank,non_compliant
+1030,The Saudi Investment Bank,البنك السعودي للاستثمار,Banks,bank,non_compliant
+1050,Banque Saudi Fransi,البنك السعودي الفرنسي,Banks,bank,non_compliant
+1060,Saudi Awwal Bank (SAB),البنك السعودي الأول,Banks,bank,non_compliant
+1080,Arab National Bank,البنك العربي الوطني,Banks,bank,non_compliant
+1120,Al Rajhi Bank,مصرف الراجحي,Banks,bank,compliant
+1140,Bank Albilad,بنك البلاد,Banks,bank,compliant
+1150,Alinma Bank,مصرف الإنماء,Banks,bank,compliant
+1180,Saudi National Bank (SNB),البنك الأهلي السعودي,Banks,bank,non_compliant
+8010,The Company for Cooperative Insurance (Tawuniya),التعاونية,Insurance,insurance,compliant
+8012,Aljazira Takaful Taawuni,الجزيرة تكافل,Insurance,insurance,compliant
+8200,Saudi Reinsurance (Saudi Re),إعادة السعودية,Insurance,insurance,compliant
+8210,Bupa Arabia for Cooperative Insurance,بوبا العربية,Insurance,insurance,compliant
+8230,Al Rajhi Company for Cooperative Insurance (Takaful Al Rajhi),تكافل الراجحي,Insurance,insurance,compliant
+7010,Saudi Telecom Company (stc),الاتصالات السعودية,Telecommunication Services,general,compliant
+7020,Etihad Etisalat (Mobily),اتحاد اتصالات (موبايلي),Telecommunication Services,general,compliant
+7030,Mobile Telecommunications Saudi Arabia (Zain KSA),زين السعودية,Telecommunication Services,general,compliant
+5110,Saudi Electricity Company,السعودية للكهرباء,Utilities,general,non_compliant
+2080,National Gas & Industrialization (GASCO),الغاز والتصنيع,Utilities,general,compliant
+2280,Almarai,المراعي,Food & Beverages,general,compliant
+2270,Saudi Dairy & Foodstuff (SADAFCO),سدافكو,Food & Beverages,general,compliant
+6010,National Agricultural Development (NADEC),نادك,Food & Beverages,general,compliant
+6001,Halwani Bros,حلواني إخوان,Food & Beverages,general,compliant
+4001,Abdullah Al Othaim Markets,أسواق العثيم,Consumer Staples Retailing,general,compliant
+4190,Jarir Marketing,جرير,Consumer Discretionary Retailing,general,compliant
+4240,Cenomi Retail (Fawaz Alhokair),سينومي ريتيل,Consumer Discretionary Retailing,general,compliant
+4003,United Electronics (eXtra),إكسترا,Consumer Discretionary Retailing,general,compliant
+4002,Mouwasat Medical Services,المواساة,Health Care Equipment & Services,general,compliant
+4004,Dallah Healthcare,دله الصحية,Health Care Equipment & Services,general,compliant
+4013,Dr. Sulaiman Al Habib Medical,سليمان الحبيب,Health Care Equipment & Services,general,compliant
+2070,Saudi Pharmaceutical Industries (SPIMACO),سبيماكو,Pharma Biotech & Life Sciences,general,compliant
+4030,National Shipping Company (Bahri),البحري,Transportation,general,compliant
+4200,Aldrees Petroleum & Transport,الدريس,Transportation,general,compliant
+4031,Saudi Ground Services,الخدمات الأرضية,Transportation,general,compliant
+2050,Savola Group,صافولا,Food & Staples Retailing,general,compliant
+1320,SSP - Saudi Steel Pipe,أنابيب السعودية,Capital Goods,general,compliant
+1210,Basic Chemical Industries,الكيميائية الأساسية,Materials,general,compliant
+4250,Jabal Omar Development,جبل عمر,Real Estate Mgmt & Dev't,general,compliant
+4220,Emaar The Economic City,إعمار المدينة الاقتصادية,Real Estate Mgmt & Dev't,general,compliant
+4300,Dar Al Arkan Real Estate,دار الأركان,Real Estate Mgmt & Dev't,general,compliant
+4330,Riyad REIT,ريت الرياض,REITs,reit,compliant
+4338,Alinma Retail REIT,الإنماء ريت للبيع بالتجزئة,REITs,reit,compliant
+4340,Al Rajhi REIT,الراجحي ريت,REITs,reit,compliant
+4342,Jadwa REIT Saudi,جدوى ريت السعودية,REITs,reit,compliant
+4345,Alinma Hospitality REIT,الإنماء ريت للضيافة,REITs,reit,compliant
