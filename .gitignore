@@ -21,3 +21,4 @@ dist/
 
 # Generated reports
 reports/out/
+backtest/results/
