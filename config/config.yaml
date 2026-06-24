@@ -34,7 +34,7 @@ field_preference:
   free_float:         [saudi_exchange, yfinance]
   shares_outstanding: [saudi_exchange, yfinance]
   financials:         [saudi_exchange, yfinance]   # official statements preferred
-  key_stats:          [yfinance, saudi_exchange]
+  key_stats:          [saudi_exchange, yfinance]
   dividends:          [saudi_exchange, yfinance]
   disclosures:        [saudi_exchange]
 

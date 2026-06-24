@@ -111,19 +111,46 @@ class SaudiExchangeProvider(DataProvider):
             return self.cache.get_or_compute("intraday_quote", f"sahmk:{code}", _fetch)
         return _fetch()
 
-    def get_company_info(self, ticker: str) -> dict[str, Any]:
-        q = self._quote(ticker)
-        if not q:
+    def _company(self, ticker: str) -> dict[str, Any]:
+        """/company/{code}/ - profile + nested 'fundamentals' (market cap, P/E, P/B, ...)."""
+        if not self.available:
             return {}
-        # SAHMK keys per the spec example; tolerate naming variants.
+        code = self._code(ticker)
+
+        def _fetch():
+            return self._get(f"company/{code}/")
+
+        if self.cache:
+            return self.cache.get_or_compute("company_info", f"sahmk-co:{code}", _fetch) or {}
+        return _fetch() or {}
+
+    def get_company_info(self, ticker: str) -> dict[str, Any]:
+        c = self._company(ticker)
+        if not c:
+            q = self._quote(ticker)  # fallback to the lighter quote endpoint
+            if not q:
+                return {}
+            return {
+                "name_en": q.get("name_en"), "name_ar": q.get("name"),
+                "price": q.get("price"), "previous_close": q.get("previous_close"),
+                "currency": "SAR", "delayed": bool(q.get("is_delayed", self.quotes_delayed)),
+                "avg_volume": q.get("volume"),
+            }
+        f = c.get("fundamentals") or {}
         return {
-            "name_en": q.get("name_en") or q.get("name_english"),
-            "name_ar": q.get("name") or q.get("name_ar"),
-            "price": q.get("price") or q.get("last_price"),
-            "previous_close": q.get("previous_close") or q.get("prev_close"),
-            "currency": "SAR",
-            "delayed": bool(q.get("is_delayed", self.quotes_delayed)),
-            "avg_volume": q.get("volume"),
+            "name_en": c.get("name_en"),
+            "name_ar": c.get("name"),
+            "sector": c.get("sector") or c.get("sector_name"),
+            "industry": c.get("industry"),
+            "description": c.get("description"),
+            "currency": c.get("currency") or "SAR",
+            "price": c.get("current_price"),
+            "delayed": bool(c.get("is_delayed", self.quotes_delayed)),
+            "market_cap": f.get("market_cap"),
+            "shares_outstanding": f.get("shares_outstanding"),
+            "free_float": f.get("float_shares"),
+            "fifty_two_week_high": f.get("fifty_two_week_high"),
+            "fifty_two_week_low": f.get("fifty_two_week_low"),
         }
 
     # ------- historical prices (SAHMK Starter+; free tier returns 403) ---- #
@@ -269,14 +296,139 @@ class SaudiExchangeProvider(DataProvider):
             self.cache.set("price_history", ckey, df)
         return df
 
+    def _financials_raw(self, ticker: str) -> dict[str, Any]:
+        if not self.available:
+            return {}
+        code = self._code(ticker)
+
+        def _fetch():
+            return self._get(f"financials/{code}/")
+
+        if self.cache:
+            return self.cache.get_or_compute("fundamentals", f"sahmk-fin:{code}", _fetch) or {}
+        return _fetch() or {}
+
+    def _dividends_raw(self, ticker: str) -> dict[str, Any]:
+        if not self.available:
+            return {}
+        code = self._code(ticker)
+
+        def _fetch():
+            return self._get(f"dividends/{code}/")
+
+        if self.cache:
+            return self.cache.get_or_compute("fundamentals", f"sahmk-div:{code}", _fetch) or {}
+        return _fetch() or {}
+
     def get_financials(self, ticker: str) -> dict[str, pd.DataFrame]:
-        return {}
+        """Income / balance / cash-flow as yfinance-style DataFrames (index=line item,
+        columns=report dates, newest first) so the analysis core consumes them unchanged."""
+        raw = self._financials_raw(ticker)
+        if not raw:
+            return {}
+
+        def _df(records: list, fmap: dict[str, str]) -> pd.DataFrame:
+            if not records:
+                return pd.DataFrame()
+            cols = [pd.to_datetime(r.get("report_date"), errors="coerce") for r in records]
+            data = {label: [r.get(src) for r in records] for label, src in fmap.items()}
+            return pd.DataFrame(data, index=cols).T  # -> index=labels, columns=dates
+
+        return {
+            "income": _df(raw.get("income_statements") or [], {
+                "Total Revenue": "total_revenue", "Gross Profit": "gross_profit",
+                "Operating Income": "operating_income", "Net Income": "net_income"}),
+            "balance": _df(raw.get("balance_sheets") or [], {
+                "Total Assets": "total_assets", "Total Liabilities": "total_liabilities",
+                "Stockholders Equity": "stockholders_equity", "Total Debt": "total_debt"}),
+            "cashflow": _df(raw.get("cash_flows") or [], {
+                "Operating Cash Flow": "operating_cash_flow", "Free Cash Flow": "free_cash_flow"}),
+        }
 
     def get_key_stats(self, ticker: str) -> dict[str, Any]:
-        return {}
+        """Valuation/profitability/growth ratios from the company 'fundamentals' block plus
+        statements (margins/ROE/ROA/growth derived) and dividends. Returns fractions where
+        the config expects them (margins, yields, growth)."""
+        try:
+            c = self._company(ticker)
+            f = (c.get("fundamentals") or {}) if c else {}
+            fin = self._financials_raw(ticker)
+            inc = fin.get("income_statements") or []
+            bal = fin.get("balance_sheets") or []
+            cfs = fin.get("cash_flows") or []
+            mc = f.get("market_cap")
+            s: dict[str, Any] = {
+                "pe": f.get("pe_ratio"), "forward_pe": f.get("forward_pe"),
+                "pb": f.get("price_to_book"), "book_value": f.get("book_value"),
+                "market_cap": mc, "shares_outstanding": f.get("shares_outstanding"),
+                "trailing_eps": f.get("eps_ttm") or f.get("eps"),
+            }
+            if inc:
+                i0 = inc[0]
+                rev, ni = i0.get("total_revenue"), i0.get("net_income")
+                gp, oi = i0.get("gross_profit"), i0.get("operating_income")
+                if rev:
+                    if mc:
+                        s["ps"] = mc / rev
+                    if ni is not None:
+                        s["net_margin"] = ni / rev
+                    if gp is not None:
+                        s["gross_margin"] = gp / rev
+                    if oi is not None:
+                        s["operating_margin"] = oi / rev
+                if len(inc) > 1:
+                    r1, n1 = inc[1].get("total_revenue"), inc[1].get("net_income")
+                    if rev and r1:
+                        s["revenue_growth"] = (rev - r1) / abs(r1)
+                    if ni is not None and n1:
+                        s["eps_growth"] = (ni - n1) / abs(n1)
+            if bal:
+                b0 = bal[0]
+                eq, ta, td = b0.get("stockholders_equity"), b0.get("total_assets"), b0.get("total_debt")
+                ni0 = inc[0].get("net_income") if inc else None
+                s["total_debt"] = td
+                if eq:
+                    if td is not None:
+                        s["debt_equity"] = td / eq
+                    if ni0 is not None:
+                        s["roe"] = ni0 / eq
+                if ta and ni0 is not None:
+                    s["roa"] = ni0 / ta
+            if cfs:
+                c0 = cfs[0]
+                fcf, ocf = c0.get("free_cash_flow"), c0.get("operating_cash_flow")
+                s["free_cashflow"], s["operating_cashflow"] = fcf, ocf
+                if fcf is not None and mc:
+                    s["fcf_yield"] = fcf / mc
+            d = self._dividends_raw(ticker)
+            if d:
+                dy = d.get("trailing_12m_yield")
+                if dy is not None:
+                    s["dividend_yield"] = dy / 100.0  # 5.09 -> 0.0509
+                ttm, eps = d.get("trailing_12m_dividends"), s.get("trailing_eps")
+                if ttm is not None and eps:
+                    s["payout_ratio"] = ttm / eps
+            return {k: v for k, v in s.items() if v is not None}
+        except Exception as exc:
+            log.warning("SAHMK key_stats failed for %s: %s", ticker, exc)
+            return {}
 
     def get_dividends(self, ticker: str) -> pd.DataFrame:
-        return pd.DataFrame()
+        d = self._dividends_raw(ticker)
+        if not d:
+            return pd.DataFrame()
+        recs = []
+        for r in d.get("history") or []:
+            when = r.get("distribution_date") or r.get("eligibility_date") or r.get("announcement_date")
+            val = r.get("value")
+            if when and val is not None:
+                recs.append((when, val))
+        if not recs:
+            return pd.DataFrame()
+        idx = pd.to_datetime([x[0] for x in recs], errors="coerce")
+        df = pd.DataFrame({"dividend": [x[1] for x in recs]}, index=idx).dropna()
+        df.index.name = "date"
+        return df.sort_index()
 
     def get_disclosures(self, ticker: str) -> list[dict[str, Any]]:
         return []
