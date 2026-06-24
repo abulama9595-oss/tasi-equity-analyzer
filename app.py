@@ -58,13 +58,13 @@ _CONV_RANK = {"high": 2, "medium": 1, "low": 0}
 
 
 @st.cache_data(show_spinner=False, ttl=21600)  # 6h
-def run_market_scan() -> "pd.DataFrame":
-    """Score every ticker in the bundled universe and return a ranking table.
-    Heavy on a cold cache (one full analysis per name) — gated behind a button and cached."""
+def run_market_scan(max_n: int) -> "pd.DataFrame":
+    """Score the first `max_n` names of the universe (large-caps first) and return a ranking
+    table. Heavy on a cold cache (one full analysis per name) — gated behind a button + cached."""
     import pandas as pd
     cfg_, registry_, composite_, sahmk_ = get_resources()
     rows = []
-    for ref in registry_.all_refs():
+    for ref in registry_.all_refs()[:max_n]:
         try:
             r = az.analyze(ref.code, cfg_, registry_, composite_, sahmk_)
         except Exception:
@@ -402,13 +402,21 @@ with tab_scan:
          "found the verdict has <b>no validated predictive edge</b>, so use this only to surface "
          "candidates for your own research — not to decide trades. Verify before acting.</div>")
 
-    if st.button("Run / refresh market scan", type="primary"):
-        run_market_scan.clear()
-        st.session_state["scan_ready"] = True
+    universe_n = len(registry.all_refs())
+    c_in, c_btn = st.columns([2, 1])
+    with c_in:
+        max_n = st.slider("Names to scan (universe is large-caps first)", min_value=10,
+                          max_value=universe_n, value=min(60, universe_n), step=10)
+    with c_btn:
+        st.write("")
+        if st.button("Run / refresh scan", type="primary", width="stretch"):
+            run_market_scan.clear()
+            st.session_state["scan_active_n"] = int(max_n)
 
-    if st.session_state.get("scan_ready"):
-        with st.spinner("Scanning the TASI universe… (first run can take 1–2 minutes; cached for 6h)"):
-            scan = run_market_scan()
+    if "scan_active_n" in st.session_state:
+        n = st.session_state["scan_active_n"]
+        with st.spinner(f"Scanning {n} names… (~{max(1, n*2//60)}–{n*4//60+1} min on a cold cache; cached 6h)"):
+            scan = run_market_scan(n)
         if scan is None or scan.empty:
             st.warning("Scan returned no results (data unavailable).")
         else:
@@ -425,7 +433,7 @@ with tab_scan:
             st.caption("Ranked by composite score (Buy: highest; Sell: lowest), conviction as tiebreak. "
                        "Not financial advice.")
     else:
-        n = len(registry.all_refs())
-        html(f"<div style='color:var(--text-dim);font-size:.9rem'>Click <b>Run / refresh market scan</b> "
-             f"to rank the ~{n}-name bundled universe. The first run scores every name "
-             f"(1–2 min on a cold cache); results are cached for 6 hours.</div>")
+        html(f"<div style='color:var(--text-dim);font-size:.9rem'>Pick how many names to scan "
+             f"(the universe has {universe_n}, large-caps first) and click <b>Run / refresh scan</b>. "
+             f"A cold run is ~1 min per ~30 names; results are cached for 6 hours. Scanning the full "
+             f"{universe_n} can take 10–15 min on a cold cache.</div>")
