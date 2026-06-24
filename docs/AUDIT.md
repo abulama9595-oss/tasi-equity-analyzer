@@ -275,3 +275,45 @@ i.e. the highest-scored basket *under*performed the lowest by ~10% over a year.
 stock's profile and generate questions — **not** as a buy/sell signal, and **do not size
 positions off the verdict.** (No methodology change was made in response to these results, to
 avoid overfitting to one in-sample backtest.)
+
+---
+
+## 12. Phase-1 research harness — cross-sectional factor findings (`python -m backtest.research`)
+
+The live tool scores **absolute** indicator levels per stock; this harness instead computes
+**cross-sectional** factors (ranked within the universe each date), which is where signal
+usually lives. Panel: 59 tickers, 72 monthly dates (2017-08 → 2025-05), 3,214 obs. Same
+survivorship/size caveats apply; 20% least-liquid names dropped each date.
+
+### Per-factor cross-sectional IC (t-stats; |t|>2 ≈ significant)
+| factor | IC 1m | IC 3m | IC 12m | 3m IC: H1 / H2 | 12m quintile spread |
+|---|---|---|---|---|---|
+| mom_12_1 | +0.01 | +0.00 | **-0.125 (t-4.8)** | 0.00 / 0.00 | **-14.3%** |
+| ret_1m | -0.00 | **+0.050 (t2.6)** | +0.04 | 0.08 / 0.02 | +2.3% |
+| ret_3y | +0.02 | +0.057 (t1.9) | +0.04 | 0.08 / 0.04 | -1.5% |
+| **px_vs_sma200** | +0.03 | **+0.079 (t3.2)** | -0.03 | 0.12 / 0.03 | -5.1% |
+| dist_52w_high | +0.02 | +0.052 (t1.9) | -0.02 | 0.07 / 0.03 | -5.2% |
+| vol_126 | -0.03 | -0.03 | **-0.052 (t-2.0)** | -0.05 / -0.02 | -0.3% |
+| rsi_14 | +0.00 | **+0.052 (t2.4)** | +0.02 | 0.09 / 0.01 | +2.3% |
+
+### What this says (the encouraging part)
+- **There IS real cross-sectional signal at ~3 months** in the *technical* factors:
+  **price-vs-200dMA (t3.2)**, **1-month return / continuation (t2.6)**, and **RSI (t2.4)** are
+  statistically significant. This is the cross-sectional version of the very signals the live
+  tool uses absolutely — and unlike the absolute versions, these *rank* future 3-month returns.
+- **Low-volatility** has a weak, directionally-consistent edge (high vol → lower 12m returns).
+
+### The honest caveats (the cautious part)
+- **The 3-month edge has decayed**: every signal is far stronger in H1 (2017-2021) than H2
+  (2021-2025) — e.g. px_vs_sma200 IC 0.12 → 0.03. Recent robustness is weak.
+- **Everything reverses by 12 months** — momentum IC -0.125 (t-4.8); these are *short-horizon*
+  (≈3m) signals, not buy-and-hold-a-year signals.
+- **The naive 1m-oriented composite did NOT beat TASI net of 25bps costs** (CAGR 3.1% vs 3.2%,
+  Sharpe 0.04) — wrong horizon to orient on, and turnover ~0.9/mo is costly.
+
+### Direction this sets for Phase 2/3
+The signal lives in a **3-month cross-sectional trend/momentum** composite (px_vs_sma200 +
+ret_1m + rsi, possibly + low-vol), oriented on the **3m** horizon, with turnover control. The
+gates before it can touch the live verdict: significant **out-of-sample** 3m IC, the H1→H2
+decay must not kill it, and it must **survive transaction costs**. Phase 1 shows the raw
+material is there — it is NOT yet a validated, cost-surviving strategy.
