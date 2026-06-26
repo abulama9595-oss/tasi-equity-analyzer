@@ -14,6 +14,7 @@ import math
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 import analyzer as az
 from analysis.technicals import signal_rows
@@ -268,8 +269,13 @@ with tab_technical:
     avail = [tf for tf in ("monthly", "weekly", "daily") if tf in t.by_timeframe]
     tf_choice = st.radio("Timeframe", avail, horizontal=True, index=0, label_visibility="collapsed")
     tfd = t.by_timeframe[tf_choice]
-    st.plotly_chart(C.candlestick_figure(tfd, cfg, title=f"{r.ticker} — {tf_choice}"),
-                    width="stretch", config={"displayModeBar": False})
+    components.html(C.lightweight_chart_html(tfd, cfg), height=450)
+    st.caption(f"{r.ticker} — {tf_choice} · interactive chart (TradingView Lightweight Charts) · "
+               "candles + SMA 20/50/200 + Bollinger + volume.")
+    st.plotly_chart(C.indicator_panes_figure(tfd, cfg), width="stretch", config={"displayModeBar": False})
+    html("<div style='color:var(--text-faint);font-size:.78rem;margin-top:2px'>✓ Indicator math "
+         "validated against <b>TA-Lib</b> (industry standard) and Wilder's reference values "
+         "(see tests/test_talib_parity.py, tests/test_indicators.py).</div>")
 
     lat = tfd.latest
     mcards = [

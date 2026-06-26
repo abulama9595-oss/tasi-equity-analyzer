@@ -5,6 +5,7 @@ Colours come from the same palette as ui/theme.py.
 """
 from __future__ import annotations
 
+import json
 import math
 from typing import Any
 
@@ -125,6 +126,85 @@ def candlestick_figure(tf, cfg, title: str = "") -> go.Figure:
         ann.font.color = TEXT
         ann.font.size = 13
     return fig
+
+
+def indicator_panes_figure(tf, cfg) -> go.Figure:
+    """RSI + MACD panes only (price/MA/volume are shown in the Lightweight Charts view)."""
+    ind = tf.ind
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.09,
+                        row_heights=[0.5, 0.5], subplot_titles=("RSI(14)", "MACD(12,26,9)"))
+    if "rsi" in ind:
+        fig.add_trace(go.Scatter(x=ind.index, y=ind["rsi"], name="RSI", line=dict(width=1.4, color=CYAN)), row=1, col=1)
+        fig.add_hline(y=cfg.indicators.rsi_overbought, line=dict(color=DOWN, width=0.7, dash="dash"), row=1, col=1)
+        fig.add_hline(y=cfg.indicators.rsi_oversold, line=dict(color=UP, width=0.7, dash="dash"), row=1, col=1)
+    if "macd" in ind:
+        colors = [UP if (v is not None and v >= 0) else DOWN for v in ind["hist"]]
+        fig.add_trace(go.Bar(x=ind.index, y=ind["hist"], name="Hist", marker_color=colors, opacity=0.45), row=2, col=1)
+        fig.add_trace(go.Scatter(x=ind.index, y=ind["macd"], name="MACD", line=dict(width=1.3, color=CYAN)), row=2, col=1)
+        fig.add_trace(go.Scatter(x=ind.index, y=ind["signal"], name="Signal", line=dict(width=1.3, color=AMBER)), row=2, col=1)
+    fig.update_layout(height=300, margin=dict(l=8, r=8, t=28, b=8), paper_bgcolor=BG, plot_bgcolor=BG,
+                      font=dict(color=DIM, family="Inter", size=12), hovermode="x unified", showlegend=False)
+    fig.update_xaxes(showgrid=True, gridcolor=GRID, zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor=GRID, zeroline=False)
+    for ann in fig.layout.annotations:
+        ann.font.color = TEXT
+        ann.font.size = 12
+    return fig
+
+
+def lightweight_chart_html(tf, cfg) -> str:
+    """TradingView Lightweight Charts (open-source) price view on OUR data: candles +
+    SMA20/50/200 + Bollinger + volume. Rendered via st.components.v1.html (client-side, no
+    server dependency) — the recognizable look traders trust, fed by the same pipeline."""
+    df, ind = tf.df, tf.ind
+    candles, vols = [], []
+    for d, o, h, l, c, v in zip(df.index, df["open"], df["high"], df["low"], df["close"], df["volume"]):
+        ts = d.strftime("%Y-%m-%d")
+        candles.append({"time": ts, "open": float(o), "high": float(h), "low": float(l), "close": float(c)})
+        col = "rgba(34,197,94,0.5)" if c >= o else "rgba(239,68,68,0.5)"
+        vols.append({"time": ts, "value": float(v) if pd.notna(v) else 0.0, "color": col})
+
+    def line(colname):
+        if colname not in ind:
+            return []
+        return [{"time": d.strftime("%Y-%m-%d"), "value": float(x)}
+                for d, x in zip(ind.index, ind[colname]) if pd.notna(x)]
+
+    data = {"candles": candles, "volume": vols, "sma20": line("sma_20"), "sma50": line("sma_50"),
+            "sma200": line("sma_200"), "bbu": line("bb_upper"), "bbl": line("bb_lower")}
+
+    tmpl = """
+<div id="lwc" style="width:100%;height:430px"></div>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+(function(){
+  var D = __DATA__;
+  var el = document.getElementById('lwc');
+  var chart = LightweightCharts.createChart(el, {
+    height: 430,
+    layout: { background:{type:'solid', color:'transparent'}, textColor:'#8b97a7', fontFamily:'Inter, sans-serif' },
+    grid: { vertLines:{color:'rgba(255,255,255,0.05)'}, horzLines:{color:'rgba(255,255,255,0.05)'} },
+    rightPriceScale: { borderColor:'#222c38' },
+    timeScale: { borderColor:'#222c38' },
+    crosshair: { mode: 1 }
+  });
+  var candle = chart.addCandlestickSeries({ upColor:'#22c55e', downColor:'#ef4444',
+    borderUpColor:'#22c55e', borderDownColor:'#ef4444', wickUpColor:'#22c55e', wickDownColor:'#ef4444' });
+  candle.setData(D.candles);
+  var vol = chart.addHistogramSeries({ priceFormat:{type:'volume'}, priceScaleId:'vol' });
+  vol.setData(D.volume);
+  chart.priceScale('vol').applyOptions({ scaleMargins:{ top:0.82, bottom:0 } });
+  function line(d, c){ if(!d || !d.length) return;
+    var s = chart.addLineSeries({ color:c, lineWidth:1.5, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
+    s.setData(d); }
+  line(D.sma20,'#22d3ee'); line(D.sma50,'#a78bfa'); line(D.sma200,'#f59e0b');
+  line(D.bbu,'rgba(139,151,167,0.45)'); line(D.bbl,'rgba(139,151,167,0.45)');
+  chart.timeScale().fitContent();
+  if (window.ResizeObserver) new ResizeObserver(function(){ chart.applyOptions({ width: el.clientWidth }); }).observe(el);
+})();
+</script>
+"""
+    return tmpl.replace("__DATA__", json.dumps(data))
 
 
 # --------------------------------------------------------------------------- #
